@@ -1,0 +1,37 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+
+# virtual env
+venv/
+
+# pycharm
+__pycache__/
+
+# vscode
+.vscode/
+
+# others
+.idea/
+.DS_STORE
+
+# project related dir
+base_chrome/
+users/
+chrome/
+chrome_profile/
+base_chrome_profile/
+cookies/
+screenshots/
+downloads/
+SS/
+secrets/
+code_backup/
+
+# project related files
+constants.py
+credentials.py
+imp.txt
+users.json
+practice.py
+
