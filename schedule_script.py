@@ -1,18 +1,3 @@
-# GMail API
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-# Emails
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email.mime.image import MIMEImage
-from email.mime.audio import MIMEAudio
-from email import encoders
-from email.mime.multipart import MIMEMultipart
-import mimetypes
-import base64
-import json
 # Selenium Web Driver
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
@@ -22,22 +7,10 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.chrome.options import Options
 # Others
 import pickle
-import random
 import time
-import os
-from datetime import datetime
 from constants import *
 from pprint import pprint
-from zipfile import ZipFile
 from utilities import *
-
-# global var
-INDEX = random.choice([1, 2, 3])
-RECAP_IMAGE_XPATH = f'//*[@id="rc-imageselect-target"]/table/tbody/tr[{INDEX}]/td[{INDEX}]'
-# SS_FORCE = False
-SS_FORCE = True
-IS_HEADLESS = True
-# IS_HEADLESS = False
 
 """
 NOTE: If you are joining zoom by browser and you successfully joined it but closed the window/ tab without leaving
@@ -48,144 +21,6 @@ NOTE: Helpful crontab tool: https://crontab.guru/ and https://cronitor.io/
 NOTE: Chromedriver doesn't stores history in Headless (saves only in Head mode) Mode but it does stores cookies in 
 both head and headless mode.
 """
-
-
-# get meeting dict info
-# done | checked > testing pending
-def get_meeting_dict_info(key, meeting_dict=None, users_dict=None, user_id=None, meeting_index=None, default=None):
-    if meeting_dict:
-        return meeting_dict.get(key, default)
-    users_dict = json.load(open('users.json', 'r')) if not users_dict else users_dict
-    if users_dict and user_id and meeting_index:
-        return users_dict.get(user_id, {})['zoom']['meetings'][meeting_index].get(key, default)
-
-
-# update meeting dict info
-# done | checked > testing pending
-def update_meeting_dict_info(user_id, meeting_index, meeting_update_dict, users_dict=None):
-    users_dict = json.load(open('users.json', 'r')) if not users_dict else users_dict
-    try:
-        users_dict.get(user_id, {}).get('zoom', {}).get('meetings', [{}])[meeting_index].update(meeting_update_dict)
-    except IndexError:
-        return False
-    else:
-        json.dump(users_dict, open('users.json', 'w'))
-        return True
-
-
-# Send Email with GMail API
-class SendEmail:
-    # init
-    def __init__(self, sender, to, subject, message_text, files: list,
-                 cc, bcc='', json_path=JSON_PATH, token_path=TOKEN_PATH):
-        self.sender = sender
-        self.to = to
-        self.subject = subject
-        self.message_text = message_text
-        self.files = files
-        self.file = None
-        self.cc = cc
-        self.bcc = bcc
-        self.json_path = json_path
-        self.token_path = token_path
-        self.scopes = SCOPES
-        self.service = None
-        self.message = None
-
-    def send_email_with_gmail_api(self):
-        """Send email with Gmail API (wrapper function)"""
-        # build service
-        self.service = self.build_service()
-        # generate email message
-        self.message = self.create_message_with_attachment()
-        # send email if message
-        if self.message:
-            print("Message is generated successfully!")
-            res = self.send_message()
-            if res:
-                print("Email sent successfully!")
-
-    def build_service(self):
-        credentials = None
-        # The file token.pickle stores the user's access and refresh tokens, and is
-        # created automatically when the authorization flow completes for the first time.
-        if os.path.exists(self.token_path):
-            credentials = Credentials.from_authorized_user_file(self.token_path, SCOPES)
-        # If there are no (valid) credentials available, let the user log in.
-        if not credentials or not credentials.valid:
-            if credentials and credentials.expired and credentials.refresh_token:
-                credentials.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    self.json_path, SCOPES)
-                credentials = flow.run_local_server(port=0)
-            # Save the credentials for the next run
-            with open(self.token_path, 'w') as token:
-                token.write(credentials.to_json())
-        # build the service
-        service = build('gmail', 'v1', credentials=credentials)
-        return service
-
-    def create_message_with_attachment(self):
-        """Create a message for an email.
-        Returns:
-        An object containing a base64url encoded email object.
-        """
-        message = MIMEMultipart()
-        message['to'] = self.to
-        message['from'] = self.sender
-        message['cc'] = self.cc
-        message['bcc'] = self.bcc
-        message['subject'] = self.subject
-
-        msg = MIMEText(self.message_text)
-        message.attach(msg)
-
-        # Attach a list of files
-        for file in self.files:
-            self.file = file
-            content_type, encoding = mimetypes.guess_type(self.file)
-            if content_type is None or encoding is not None:
-                content_type = 'application/octet-stream'
-            main_type, sub_type = content_type.split('/', 1)
-            with open(self.file, 'rb') as fp:
-                if main_type == 'text':
-                    msg = MIMEText(fp.read(), _subtype=sub_type)
-                elif main_type == 'image':
-                    msg = MIMEImage(fp.read(), _subtype=sub_type)
-                elif main_type == 'audio':
-                    msg = MIMEAudio(fp.read(), _subtype=sub_type)
-                else:
-                    msg = MIMEBase(main_type, sub_type)
-                    msg.set_payload(fp.read())
-            # encode the file -> credit: https://www.geeksforgeeks.org/send-mail-attachment-gmail-account-using-python/
-            encoders.encode_base64(msg)
-            # set name of the file from its path
-            filename = os.path.basename(self.file)
-            # add info to header about the file attachment
-            msg.add_header('Content-Disposition', 'attachment', filename=filename)
-            # finally attach it to message
-            message.attach(msg)
-        # credit for below: https://stackoverflow.com/a/46668827
-        b64_bytes = base64.urlsafe_b64encode(message.as_bytes())
-        b64_string = b64_bytes.decode()
-        return {'raw': b64_string}
-
-    def send_message(self, user_id="me"):
-        """Send an email message."""
-        # me -> authenticated user => sender
-        try:
-            # pylint: disable=maybe-no-member
-            message = (self.service.users().messages().send(userId=user_id, body=self.message).execute())
-            print('Message Id:', message['id'])
-            return message
-        except Exception as error:
-            print('An error occurred:', error)
-
-
-# json.dump(users, open('users.json', 'w'), indent=4)
-# users_dict = json.load(open('users.json', 'r'))
-# pprint(users_dict)
 
 
 # Chrome Driver
@@ -419,55 +254,6 @@ class Browser(ChromeDriver):
             self.quit_driver()
 
 
-# Get Header
-# done | checked > testing pending
-def get_header():
-    header = BAR + f'* Zoom Bot Developed with ❤️ by: {NAME} *\n'
-    header += BAR + f'* Zoom Bot Logging at [{get_formatted_date_time()}] *\n'
-    header += BAR + '\n\n'
-    return header
-
-
-# Get Footer
-# done | checked > testing pending
-def get_footer():
-    footer = f'\n* Copyright © 2021 Zoom Bot | {NAME} * All Rights Reserved *\n\n'
-    return footer
-
-
-# Save info into file
-# done | checked > testing pending
-def save_info(info, filepath, mode='a+', info_name='info', add_header=True, add_footer=True):
-    info = get_header() if add_header else '' + info
-    info = info + get_footer() if add_footer else ''
-    try:
-        with open(filepath, mode) as file:
-            file.write(info)
-    except Exception as err_msg:
-        print(f"Couldn't save {info_name}! Error occurred!")
-        print(err_msg)
-        return False
-    else:
-        print(f"{info_name} is saved Successfully!")
-        return True
-
-
-# Save zip file
-# done | checked > testing pending
-def save_zip(zip_filepath, files: list, mode='w', filename='zip_file'):
-    try:
-        with ZipFile(zip_filepath, mode) as zip_file:
-            for file in files:
-                zip_file.write(file)
-    except Exception as err_msg:
-        print(f"Couldn't save {filename}! Error occurred!")
-        print(err_msg)
-        return False
-    else:
-        print(f"{filename} is saved Successfully!")
-        return True
-
-
 # Build Base Chrome Profile: History is not saved by chromedriver in headless mode, only cookies are saved!
 def build_base_chrome_profile(base_profile_root, base_profile_dir, is_headless=True):
     os.system(f'rm -rf {base_profile_root}')
@@ -482,7 +268,7 @@ def script(root=os.getcwd()):
     user_dir_root = gen_path(root, 'users', make_path_dir=True)
     users_path = gen_path(root, 'users.json')
     if not validate_path(users_path):
-        print("users.json i.e users_path is not validated! Exiting!")
+        print("users_path is not validated! Exiting!")
         return 1
     users = json.load(open(users_path, 'r'))
     # pprint(users)
@@ -529,8 +315,8 @@ def script(root=os.getcwd()):
                 'id': user_id,
                 'email': users[user_id]['email'],
                 'name': users[user_id]['name'],
-                # 'email_notify': meeting.get('email_notify', False),
-                'email_notify': False,
+                'email_notify': meeting.get('email_notify', False),
+                # 'email_notify': False,
                 'owner': users[user_id].get('owner', False),
                 # Zoom Bot
                 'bot_root': meeting_dir,
@@ -541,6 +327,8 @@ def script(root=os.getcwd()):
             })
             pprint(kwargs)
             json.dump(kwargs, open(kwargs_path, 'w'), indent=4)
+            script_path = gen_path(root, 'zoom_bot.py')
+            logs_path = gen_path(meeting_dir, 'logs.txt')
             if meeting.get('repeat'):
                 end_date, weekdays = meeting['schedule']['end_date'], meeting['schedule']['weekdays']
                 # os.system(f'python3 zoom_bot.py "{kwargs_path}"')
@@ -550,13 +338,13 @@ def script(root=os.getcwd()):
                 # reference: Benefit of having dates in format: YYYY-MM-DD : https://stackoverflow.com/a/16166356
                 if start_date <= current_date <= end_date:
                     # in users.json: # 0 -> sun, 6 -> sat but here in datetime.date.weekday(): # 0 -> mon, 6 -> sun
-                    print("Meeting is scheduled today!")
-                    script_path = gen_path(root, 'zoom_bot.py')
-                    logs_path = gen_path(meeting_dir, 'logs.txt')
-                    os.system(f'python3 {script_path} {kwargs_path} >{logs_path} 2>&1')
+                    # print("Meeting is scheduled today!")
                     current_weekday = (datetime.now().weekday() + 1) % 7
                     if current_weekday in weekdays:
-                        pass
+                        print(f"Meeting: "
+                              f"{meeting.get('id', '') if meeting.get('id', '') else meeting.get('tag', 'SBP100')} "
+                              f"is scheduled today!")
+                        os.system(f'python3 {script_path} {kwargs_path} >{logs_path} 2>&1')
                         # os.system(f'python3 zoom_bot.py {kwargs_path} > {root_dir}/logs.txt')
                         # # if start_time + duration < duration + 10 min then schedule
                         # start_time, duration = meeting['schedule']['start_time'], meeting['schedule']['duration']
@@ -566,11 +354,29 @@ def script(root=os.getcwd()):
                         # cron_job = f"{cron_job} ; crontab -l | grep -iv '{cron_job}' | crontab -"
                         # cron_job = f'(crontab -l 2>/dev/null || true ; echo "{cron_job}") | crontab -'
                         # os.system(cron_job)
+                    else:
+                        print(f"Sorry! Meeting: "
+                              f"{meeting.get('id', '') if meeting.get('id', '') else meeting.get('tag', 'SBP100')} "
+                              f"isn't scheduled today!")
+                        os.system(f'rm -rf {meeting_dir}')
+                else:
+                    print(f"Sorry! Meeting: "
+                          f"{meeting.get('id', '') if meeting.get('id', '') else meeting.get('tag', 'SBP100')} "
+                          f"isn't scheduled today!")
+                    os.system(f'rm -rf {meeting_dir}')
             else:
                 # check if current date equals start date and then check for time and then schedule
                 if current_date == start_date:
                     # main(['', kwargs_path])
-                    os.system(f'python3 zoom_bot.py {kwargs_path} > {meeting_dir}/logs.txt')
+                    print(f"Meeting: "
+                          f"{meeting.get('id', '') if meeting.get('id', '') else meeting.get('tag', 'SBP100')} "
+                          f"is scheduled today!")
+                    os.system(f'python3 {script_path} {kwargs_path} >{logs_path} 2>&1')
+                else:
+                    print(f"Sorry! Meeting: "
+                          f"{meeting.get('id', '') if meeting.get('id', '') else meeting.get('tag', 'SBP100')} "
+                          f"isn't scheduled today!")
+                    os.system(f'rm -rf {meeting_dir}')
 
 
 if __name__ == '__main__':

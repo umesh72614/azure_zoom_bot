@@ -12,7 +12,6 @@ from email import encoders
 from email.mime.multipart import MIMEMultipart
 import mimetypes
 import base64
-import json
 # Selenium Web Driver
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
@@ -25,24 +24,11 @@ from selenium.webdriver.chrome.options import Options
 import pyautogui as pag
 # Others
 import pickle
-import random
 import time
-import os
 import sys
-from datetime import datetime
 from constants import *
-from pprint import pprint
 from shutil import make_archive
-from zipfile import ZipFile
 from utilities import *
-
-# global var
-INDEX = random.choice([1, 2, 3])
-RECAP_IMAGE_XPATH = f'//*[@id="rc-imageselect-target"]/table/tbody/tr[{INDEX}]/td[{INDEX}]'
-# SS_FORCE = False
-SS_FORCE = True
-IS_HEADLESS = True
-# IS_HEADLESS = False
 
 """
 NOTE: If you are joining zoom by browser and you successfully joined it but closed the window/ tab without leaving
@@ -51,29 +37,6 @@ joining browser meetings of zoom, if you are not logged in or not saving cookies
 you will still be present in the meeting for few minutes!!
 NOTE: Helpful crontab tool: https://crontab.guru/ and https://cronitor.io/
 """
-
-
-# get meeting dict info
-# done | checked > testing pending
-def get_meeting_dict_info(key, meeting_dict=None, users_dict=None, user_id=None, meeting_index=None, default=None):
-    if meeting_dict:
-        return meeting_dict.get(key, default)
-    users_dict = json.load(open('users.json', 'r')) if not users_dict else users_dict
-    if users_dict and user_id and meeting_index:
-        return users_dict.get(user_id, {})['zoom']['meetings'][meeting_index].get(key, default)
-
-
-# update meeting dict info
-# done | checked > testing pending
-def update_meeting_dict_info(user_id, meeting_index, meeting_update_dict, users_dict=None):
-    users_dict = json.load(open('users.json', 'r')) if not users_dict else users_dict
-    try:
-        users_dict.get(user_id, {}).get('zoom', {}).get('meetings', [{}])[meeting_index].update(meeting_update_dict)
-    except IndexError:
-        return False
-    else:
-        json.dump(users_dict, open('users.json', 'w'), indent=4)
-        return True
 
 
 # Send Email with GMail API
@@ -184,11 +147,6 @@ class SendEmail:
             return message
         except Exception as error:
             print('An error occurred:', error)
-
-
-# json.dump(users, open('users.json', 'w'), indent=4)
-# users_dict = json.load(open('users.json', 'r'))
-# pprint(users_dict)
 
 
 # Chrome Driver
@@ -581,61 +539,6 @@ class ReCaptchaV2Cracker:
             return self.crack_audio(xpath)
 
 
-# Get Header
-# done | checked > testing pending
-def get_header():
-    header = '\t' + BAR + f'\n* Zoom Bot Developed with ❤️ by: {NAME} *\n'
-    header += '\t' + BAR + f'\n* Zoom Bot Logging at [{get_formatted_date_time()}] *\n'
-    header += '\t' + BAR + '\n\n'
-    return header
-
-
-# Get Footer
-# done | checked > testing pending
-def get_footer():
-    footer = f'\n* Copyright © 2021 Zoom Bot | {NAME} | All Rights Reserved *\n\n'
-    return footer
-
-
-# Save info into file
-# done | checked > testing pending
-def save_info(info, filepath, mode='a+', info_name='info', add_header=True, add_footer=True):
-    # info = get_header() if add_header else '' + info
-    # below is correct while above is incorrect
-    info = get_header() + info if add_header else '' + info
-    # info = info + '\n' + get_footer() if add_footer else ''
-    # below is correct while above is incorrect
-    info = info + '\n' + get_footer() if add_footer else info + '\n' + ''
-    try:
-        with open(filepath, mode) as file:
-            file.write(info)
-    except Exception as err_msg:
-        print(f"Couldn't save {info_name}! Error occurred!")
-        print(err_msg)
-        return False
-    else:
-        print(f"{info_name} is saved Successfully!")
-        return True
-
-
-# Save zip file
-# done | checked > testing pending
-# [MUST READ] reference: https://stackoverflow.com/questions/27991745/zip-file-and-avoid-directory-structure
-def save_zip(zip_filepath, files: list, mode='w', filename='zip_file'):
-    try:
-        with ZipFile(zip_filepath, mode) as zip_file:
-            for file in files:
-                # second parameter is used to avoid building whole directory structure inside zip
-                zip_file.write(file, file.split('/')[-1].strip())
-    except Exception as err_msg:
-        print(f"Couldn't save {filename}! Error occurred!")
-        print(err_msg)
-        return False
-    else:
-        print(f"{filename} is saved Successfully!")
-        return True
-
-
 """
 Errors during Testing:
 1. 
@@ -694,7 +597,7 @@ class ZoomBot(ChromeDriver):
         self.bot_root = kwargs.get('bot_root', os.getcwd())
         # Others
         self.zoom_meeting_not_stared_tries = 0
-        self.failed_message = "Sorry couldn't join Zoom meeting!"
+        self.log_message = "Sorry couldn't join Zoom meeting!"
         super().__init__(is_headless, **kwargs)
 
     # basic registration for meeting
@@ -712,8 +615,8 @@ class ZoomBot(ChromeDriver):
             print("Entered Basic Registration Credentials Successfully!")
             self.action_with_web_driver_wait(By.ID, ZOOM_SUBMIT_BTN_ID)
         except Exception as err_msg:
-            self.failed_message = "Couldn't Basic Register for Zoom Meeting! Error occurred!"
-            print(self.failed_message)
+            self.log_message = "Couldn't Basic Register for Zoom Meeting! Error occurred!"
+            print(self.log_message)
             print(err_msg)
             return False
         else:
@@ -763,9 +666,9 @@ class ZoomBot(ChromeDriver):
     # save/ extract meeting info to/ from dict
     # done | checked > testing pending
     def save_meeting_info(self, meeting_update_dict):
-        # users = json.load(open('users.json', 'r'))
+        # users = json.load(open(USERS_PATH, 'r'))
         # users[self.id]['zoom']['meetings'][self.zoom_meeting_index].update(meeting_update_dict)
-        # json.dump(users, open('users.json', 'w'), indent=4)
+        # json.dump(users, open(USERS_PATH, 'w'), indent=4)
         if update_meeting_dict_info(self.id, self.zoom_meeting_index, meeting_update_dict):
             print(f"Updated meeting info into disk Successfully!")
         self.zoom_meeting_id = meeting_update_dict.get('id', self.zoom_meeting_id)
@@ -848,8 +751,8 @@ class ZoomBot(ChromeDriver):
             self.capture_ss(ss_name='zoom_meeting_id.png', force=SS_FORCE)
             self.action_with_web_driver_wait(By.ID, ZOOM_SUBMIT_BTN_ID)
         except Exception as err_msg:
-            self.failed_message = "Couldn't Enter Zoom Meeting ID! Error occurred!"
-            print(self.failed_message)
+            self.log_message = "Couldn't Enter Zoom Meeting ID! Error occurred!"
+            print(self.log_message)
             print(err_msg)
             return None
         else:
@@ -879,8 +782,8 @@ class ZoomBot(ChromeDriver):
                         print("Got the Zoom Meeting Link! Now trying joining using link!")
                         return self.join_meeting_link(self.zoom_meeting_url)
                 else:
-                    self.failed_message = "Zoom Meeting requires Registration! Not registering for the Zoom Meeting!"
-                    print(self.failed_message)
+                    self.log_message = "Zoom Meeting requires Registration! Not registering for the Zoom Meeting!"
+                    print(self.log_message)
                     return False
 
     # check if bot is in waiting room
@@ -968,8 +871,8 @@ class ZoomBot(ChromeDriver):
         try:
             self.action_with_web_driver_wait(By.ID, ZOOM_INPUT_NAME_ID, action='keys', keys=self.zoom_name)
         except Exception:
-            self.failed_message = "Invalid Meeting Link provided! This Zoom Meeting is not capable for join by browser!"
-            print(self.failed_message)
+            self.log_message = "Invalid Meeting Link provided! This Zoom Meeting is not capable for join by browser!"
+            print(self.log_message)
             return False
         else:
             self.capture_ss(ss_name='zoom_meeting_browser_link.png', force=SS_FORCE)
@@ -997,9 +900,9 @@ class ZoomBot(ChromeDriver):
                             print("Zoom Meeting not started yet! Trying Joining Again!")
                             return self.join_meeting_link(self.zoom_meeting_url, True)
                         else:
-                            self.failed_message = "Zoom Meeting not started! Zoom Bot couldn't wait more! Check Start" \
+                            self.log_message = "Zoom Meeting not started! Zoom Bot couldn't wait more! Check Start" \
                                                 " time and Try again!"
-                            print(self.failed_message)
+                            print(self.log_message)
                             return None
                     # add support for: Leave Meeting (previously removed by host)
                     self.custom_wait(3)
@@ -1012,8 +915,8 @@ class ZoomBot(ChromeDriver):
                     return True
                 except Exception as err_msg:
                     self.capture_ss(ss_name='zoom_meeting_error_failed.png', force=SS_FORCE)
-                    self.failed_message = "Sorry couldn't join Zoom meeting! Error occurred!"
-                    print(self.failed_message)
+                    self.log_message = "Sorry couldn't join Zoom meeting! Error occurred!"
+                    print(self.log_message)
                     print(err_msg)
                     return False
             else:
@@ -1027,8 +930,8 @@ class ZoomBot(ChromeDriver):
         err_meeting = self.is_meeting_page(By.CLASS_NAME, ZOOM_ERR_MSG_SPAN_CLASS, 'Error Page', attr_name='',
                                            ss_name='zoom_meeting_err.png', ele_verbose=3, attr_verbose=1)
         if err_meeting:
-            self.failed_message = "Zoom meeting link has error! Trying joining by ID if ID is provided!"
-            print(self.failed_message)
+            self.log_message = "Zoom meeting link has error! Trying joining by ID if ID is provided!"
+            print(self.log_message)
             # print("Zoom meeting link has error! Zoom Bot couldn't proceed! Check meeting link and Try Again!")
             # return False
         return err_meeting
@@ -1050,8 +953,8 @@ class ZoomBot(ChromeDriver):
         self.zoom_meeting_duration_min = int(self.zoom_meeting_duration_min)
         if int((time.time() - t0) / 60) >= wait_duration or self.is_wait_host_page(ele_verbose, attr_verbose):
             self.zoom_meeting_duration_min = 0
-            self.failed_message = "Host isn't letting Zoom Bot join meeting! Zoom Bot can't wait more! Try Again!"
-            print(self.failed_message)
+            self.log_message = "Host isn't letting Zoom Bot join meeting! Zoom Bot can't wait more! Try Again!"
+            print(self.log_message)
             # return None
             return True
         return False
@@ -1085,9 +988,9 @@ class ZoomBot(ChromeDriver):
         if removed_by_host:
             self.close_meeting_popup(verbose=verbose, always_print_checking=always_print_checking)
             message = 'previously ' if popup_label == ZOOM_LEAVE_MEETING_MSG else ''
-            self.failed_message = f"Zoom Bot isn't allowed to join meeting as it was {message}removed by Host! " \
+            self.log_message = f"Zoom Bot isn't allowed to join meeting as it was {message}removed by Host! " \
                                   f"Try Again!"
-            print(self.failed_message)
+            print(self.log_message)
             # return None
         return removed_by_host
 
@@ -1108,8 +1011,8 @@ class ZoomBot(ChromeDriver):
             self.custom_wait(3)
             err_element, _ = self.get_element_and_attribute(By.XPATH, ZOOM_INVALID_PASS_XPATH, 'passcode_invalid', '')
             if err_element is not None:
-                self.failed_message = "Couldn't join meeting! Invalid Meeting passcode is provided!"
-                print(self.failed_message)
+                self.log_message = "Couldn't join meeting! Invalid Meeting passcode is provided!"
+                print(self.log_message)
                 return None
         return enter_passcode
 
@@ -1122,8 +1025,8 @@ class ZoomBot(ChromeDriver):
             if pass_code is None:
                 raise Exception
             elif not self.zoom_meeting_pass:
-                self.failed_message = "Meeting requires passcode! Can't enter passcode as it is not provided!"
-                print(self.failed_message)
+                self.log_message = "Meeting requires passcode! Can't enter passcode as it is not provided!"
+                print(self.log_message)
                 return None
             else:
                 self.action_with_web_driver_wait(By.ID, ZOOM_INPUT_PASS_ID, action='key', keys=self.zoom_meeting_pass)
@@ -1452,7 +1355,7 @@ class ZoomBot(ChromeDriver):
     # generate email subject and message for sending email
     # done | checked > testing pending
     def gen_email_sub_msg(self, mode='started'):
-        log_message = self.failed_message[:] if mode == 'failed' else f"Zoom Bot {mode} attended meeting!"
+        log_message = self.log_message[:] if mode in ['failed', 'finished'] else f"Zoom Bot {mode} attended meeting!"
         email_sub = f"[{mode.upper()}] Zoom Bot has {mode} attending your Zoom Meeting: " \
                     f"{self.zoom_meeting_id if self.zoom_meeting_id else self.zoom_meeting_tag}"
         email_msg_header = f'Dear {self.name}\n\n{email_sub.split("]")[-1].strip()} [{self.zoom_meeting_tag}] at ' \
@@ -1557,8 +1460,10 @@ class ZoomBot(ChromeDriver):
                         break
                 self.custom_wait(5)
                 self.leave_meeting()
-                print("Zoom Meeting was attended for duration:", str(int((time.time() - t0) / 60)) + ' min',
-                      'and actual Duration:', str(self.zoom_meeting_duration_min) + ' min')
+                self.log_message = f"Zoom Bot Finished attending Meeting! Zoom Meeting was attended for duration: " \
+                                   f"{str(int((time.time() - t0) / 60))} min and actual Duration: " \
+                                   f"{str(self.zoom_meeting_duration_min)} min"
+                print(self.log_message)
                 self.extract_info_breakpoint('finished')
                 return True
             else:
